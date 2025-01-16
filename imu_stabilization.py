@@ -1,6 +1,7 @@
 import smbus  # For IMU communication
 import numpy as np
 import time  # For delay
+import socket  # For sending data in real-time
 
 # Initialize I2C bus and MPU-6050 address
 bus = smbus.SMBus(1)  # 1 indicates /dev/i2c-1
@@ -72,6 +73,15 @@ def stabilize_robot(rotation_matrix):
     print("Stabilizing robot with rotation matrix:")
     print(rotation_matrix)
 
+def send_data_via_socket(data):
+    # Send data to a server or another device using a socket
+    host = '192.168.1.100'  # Replace with your server IP
+    port = 5000  # Replace with your desired port
+
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+        message = ','.join(map(str, data))
+        s.sendto(message.encode(), (host, port))
+
 # Main loop
 initialize_mpu()
 while True:
@@ -79,4 +89,5 @@ while True:
     pitch, roll, yaw = imu_data  # Parse angles
     rotation_matrix = compute_rotation_matrix(pitch, roll, yaw)
     stabilize_robot(rotation_matrix)
+    send_data_via_socket([pitch, roll, yaw])
     time.sleep(0.1)  # Add delay for stability
