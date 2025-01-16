@@ -7,7 +7,7 @@
 A real-time stabilization system for quadruped robots using IMU-based orientation detection and inverse kinematics for leg position adjustment.
 
 <div align="center">
-  <img src="https://user-images.githubusercontent.com/YOUR_USERNAME/YOUR_REPO/raw/main/docs/images/robot_demo.gif" alt="Robot Demo" width="600"/>
+  <img src="https://github.com/botzo-team/rotation_matrices_v1/blob/main/docs/images/robot_demo.gif" alt="Robot Demo" width="600"/>
 </div>
 
 ## 🌟 Features
