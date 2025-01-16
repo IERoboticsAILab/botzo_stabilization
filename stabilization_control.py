@@ -67,7 +67,7 @@ class QuadrupedStabilizer:
         self.ax.set_xlabel('X (mm)')
         self.ax.set_ylabel('Y (mm)')
         self.ax.set_zlabel('Z (mm)')
-        self.ax.set_title('Quadruped Robot Stabilization')
+        self.ax.set_title('Botzo Robot Stabilization')
         
         # Set consistent view limits
         limit = max(self.BODY_LENGTH, self.BODY_WIDTH, self.DEFAULT_HEIGHT) * 1.5
