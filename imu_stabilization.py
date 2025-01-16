@@ -1,58 +1,89 @@
-import smbus  # For IMU communication
 import numpy as np
-import time  # For delay
-import socket  # For sending data in real-time
+import time
+import platform
+import socket
 
-# Initialize I2C bus and MPU-6050 address
-bus = smbus.SMBus(1)  # 1 indicates /dev/i2c-1
-MPU_ADDRESS = 0x68  # Default I2C address for MPU-6050
+# Only import smbus2 if we're on Linux (where I2C is available)
+SIMULATION_MODE = platform.system() != 'Linux'
+if not SIMULATION_MODE:
+    import smbus2 as smbus
 
-# MPU-6050 Registers
-PWR_MGMT_1 = 0x6B
-ACCEL_XOUT_H = 0x3B
-GYRO_XOUT_H = 0x43
+class IMU:
+    def __init__(self, simulation_mode=SIMULATION_MODE):
+        self.simulation_mode = simulation_mode
+        
+        if not simulation_mode:
+            # Real hardware initialization
+            self.bus = smbus.SMBus(1)
+            self.initialize_mpu()
+        else:
+            print("Running in simulation mode - using synthetic IMU data")
+            self.last_update = time.time()
+            self.simulated_angles = [0, 0, 0]  # pitch, roll, yaw
+        
+    def initialize_mpu(self):
+        if not self.simulation_mode:
+            # MPU-6050 Constants
+            MPU_ADDRESS = 0x68
+            PWR_MGMT_1 = 0x6B
+            self.bus.write_byte_data(MPU_ADDRESS, PWR_MGMT_1, 0)
+    
+    def read_raw_data(self, addr):
+        if not self.simulation_mode:
+            # Real hardware reading
+            MPU_ADDRESS = 0x68
+            high = self.bus.read_byte_data(MPU_ADDRESS, addr)
+            low = self.bus.read_byte_data(MPU_ADDRESS, addr + 1)
+            value = (high << 8) | low
+            if value > 32768:
+                value -= 65536
+            return value
+        return 0  # In simulation mode, return 0 for raw data
+    
+    def read_imu_data(self):
+        if not self.simulation_mode:
+            # Real hardware reading
+            ACCEL_XOUT_H = 0x3B
+            GYRO_XOUT_H = 0x43
+            
+            accel_x = self.read_raw_data(ACCEL_XOUT_H)
+            accel_y = self.read_raw_data(ACCEL_XOUT_H + 2)
+            accel_z = self.read_raw_data(ACCEL_XOUT_H + 4)
 
-# Initialize MPU-6050
-def initialize_mpu():
-    bus.write_byte_data(MPU_ADDRESS, PWR_MGMT_1, 0)  # Wake up the MPU-6050
+            gyro_x = self.read_raw_data(GYRO_XOUT_H)
+            gyro_y = self.read_raw_data(GYRO_XOUT_H + 2)
+            gyro_z = self.read_raw_data(GYRO_XOUT_H + 4)
 
-def read_raw_data(addr):
-    # Read two bytes of data from the given register
-    high = bus.read_byte_data(MPU_ADDRESS, addr)
-    low = bus.read_byte_data(MPU_ADDRESS, addr + 1)
-    value = (high << 8) | low
-    if value > 32768:
-        value -= 65536
-    return value
+            # Convert to degrees/sec and g
+            accel_scale = 16384.0
+            gyro_scale = 131.0
 
-def read_imu_data():
-    # Read accelerometer and gyroscope data
-    accel_x = read_raw_data(ACCEL_XOUT_H)
-    accel_y = read_raw_data(ACCEL_XOUT_H + 2)
-    accel_z = read_raw_data(ACCEL_XOUT_H + 4)
+            accel_x /= accel_scale
+            accel_y /= accel_scale
+            accel_z /= accel_scale
 
-    gyro_x = read_raw_data(GYRO_XOUT_H)
-    gyro_y = read_raw_data(GYRO_XOUT_H + 2)
-    gyro_z = read_raw_data(GYRO_XOUT_H + 4)
+            gyro_x /= gyro_scale
+            gyro_y /= gyro_scale
+            gyro_z /= gyro_scale
 
-    # Convert to degrees/sec and g (scaled values depend on sensor settings)
-    accel_scale = 16384.0  # Assuming +/- 2g range
-    gyro_scale = 131.0  # Assuming +/- 250 degrees/sec range
-
-    accel_x /= accel_scale
-    accel_y /= accel_scale
-    accel_z /= accel_scale
-
-    gyro_x /= gyro_scale
-    gyro_y /= gyro_scale
-    gyro_z /= gyro_scale
-
-    # Calculate pitch, roll, yaw (simplified, not accounting for fusion/filtering)
-    pitch = np.arctan2(accel_y, np.sqrt(accel_x**2 + accel_z**2)) * (180 / np.pi)
-    roll = np.arctan2(-accel_x, accel_z) * (180 / np.pi)
-    yaw = gyro_z  # Simplified yaw, typically requires integration
-
-    return pitch, roll, yaw
+            pitch = np.arctan2(accel_y, np.sqrt(accel_x**2 + accel_z**2)) * (180 / np.pi)
+            roll = np.arctan2(-accel_x, accel_z) * (180 / np.pi)
+            yaw = gyro_z
+            
+            return pitch, roll, yaw
+        else:
+            # Simulation mode - generate synthetic motion
+            current_time = time.time()
+            dt = current_time - self.last_update
+            
+            # Create smooth oscillating motion
+            t = current_time
+            self.simulated_angles[0] = 20 * np.sin(0.5 * t)  # Pitch
+            self.simulated_angles[1] = 15 * np.cos(0.3 * t)  # Roll
+            self.simulated_angles[2] = 10 * np.sin(0.2 * t)  # Yaw
+            
+            self.last_update = current_time
+            return tuple(self.simulated_angles)
 
 def compute_rotation_matrix(pitch, roll, yaw):
     # Define rotation matrices
@@ -68,10 +99,9 @@ def compute_rotation_matrix(pitch, roll, yaw):
     return np.dot(R_z, np.dot(R_y, R_x))
 
 def stabilize_robot(rotation_matrix):
-    # Placeholder logic for stabilizing the robot
-    # Use rotation_matrix to compute actuator adjustments
-    print("Stabilizing robot with rotation matrix:")
-    print(rotation_matrix)
+    # Import stabilization code only when needed
+    from stabilization_control import stabilize_robot as stabilize
+    stabilize(rotation_matrix)
 
 def send_data_via_socket(data):
     # Send data to a server or another device using a socket
@@ -82,12 +112,16 @@ def send_data_via_socket(data):
         message = ','.join(map(str, data))
         s.sendto(message.encode(), (host, port))
 
-# Main loop
-initialize_mpu()
-while True:
-    imu_data = read_imu_data()
-    pitch, roll, yaw = imu_data  # Parse angles
-    rotation_matrix = compute_rotation_matrix(pitch, roll, yaw)
-    stabilize_robot(rotation_matrix)
-    send_data_via_socket([pitch, roll, yaw])
-    time.sleep(0.1)  # Add delay for stability
+if __name__ == "__main__":
+    print(f"Running in {'simulation' if SIMULATION_MODE else 'hardware'} mode")
+    imu = IMU()
+    while True:
+        try:
+            pitch, roll, yaw = imu.read_imu_data()
+            rotation_matrix = compute_rotation_matrix(pitch, roll, yaw)
+            stabilize_robot(rotation_matrix)
+            print(f"Pitch: {pitch:.1f}°, Roll: {roll:.1f}°, Yaw: {yaw:.1f}°")
+            time.sleep(0.1)
+        except KeyboardInterrupt:
+            print("\nProgram stopped by user")
+            break
