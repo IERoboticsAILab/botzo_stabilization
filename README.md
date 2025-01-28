@@ -30,50 +30,79 @@ A real-time stabilization system for quadruped robots using IMU-based orientatio
   - Leg Length: 193mm
   - Standing Height: 125mm
 
-## 📊 System Architecture
+## 📡 Hardware Setup
 
-```mermaid
-graph TD
-    A[MPU-6050 IMU] -->|I2C| B[Raspberry Pi]
-    B -->|Process Orientation| C[Compute Rotation Matrix]
-    C -->|Calculate Adjustments| D[Inverse Kinematics]
-    D -->|Serial Commands| E[Arduino Mega]
-    E -->|PWM Control| F[12× DS3225 Servos]
-    B -->|Visualization| G[3D Display]
-```
+### MPU-6050 Connection to Raspberry Pi
 
-## 🚀 Quick Start
-
-1. **Create and activate virtual environment:**
+1. **Enable I2C on Raspberry Pi:**
    ```bash
-   python -m venv venv
-   source venv/bin/activate  # On Unix/macOS
-   # or
-   .\venv\Scripts\activate  # On Windows
+   sudo raspi-config
+   # Navigate to: Interface Options -> I2C -> Enable
+   sudo reboot
    ```
 
-2. **Install dependencies:**
+2. **Install I2C Tools:**
+   ```bash
+   sudo apt-get update
+   sudo apt-get install -y python3-smbus i2c-tools
+   ```
+
+3. **Connect MPU-6050 to Raspberry Pi:**
+   | MPU-6050 Pin | Raspberry Pi Pin | Description |
+   |--------------|------------------|-------------|
+   | VCC         | Pin 1 (3.3V)     | Power       |
+   | GND         | Pin 6 (Ground)   | Ground      |
+   | SCL         | Pin 5 (GPIO 3)   | Clock       |
+   | SDA         | Pin 3 (GPIO 2)   | Data        |
+
+4. **Verify Connection:**
+   ```bash
+   sudo i2cdetect -y 1
+   ```
+   You should see "68" in the output grid (MPU-6050's I2C address).
+
+### Arduino Setup
+
+1. **Connect Arduino Mega to Raspberry Pi via USB**
+2. **Check Arduino Connection:**
+   ```bash
+   ls /dev/ttyACM*
+   ```
+   Should show `/dev/ttyACM0`
+
+3. **Set Permissions:**
+   ```bash
+   sudo usermod -a -G dialout $USER
+   ```
+
+## 🚀 Software Setup
+
+1. **Clone Repository and Setup Environment:**
+   ```bash
+   # Create project directory
+   mkdir ~/botzo_stabilization
+   cd ~/botzo_stabilization
+
+   # Create and activate virtual environment
+   python3 -m venv venv
+   source venv/bin/activate
+   ```
+
+2. **Install Dependencies:**
    ```bash
    pip install -r requirements.txt
    ```
 
-3. **Upload Arduino code:**
+3. **Upload Arduino Code:**
    - Open `quadruped_servo_controller/quadruped_servo_controller.ino` in Arduino IDE
-   - Select Arduino Mega 2560 board
-   - Upload the code
+   - Select "Arduino Mega 2560" board
+   - Choose correct port
+   - Click Upload
 
-4. **Run the system:**
+4. **Run the System:**
    ```bash
    python imu_stabilization.py
    ```
-
-## 💻 Development Mode
-
-The system includes a simulation mode that runs automatically on non-Linux systems:
-- Simulates IMU readings
-- Shows 3D visualization
-- Prints servo commands
-- No hardware required
 
 ## 🎮 Controls & Visualization
 
@@ -109,13 +138,42 @@ self.LEG_LENGTH = 193   # mm
 self.DEFAULT_HEIGHT = 125  # mm
 ```
 
-## 📊 Data Flow
+## 🔍 Troubleshooting
 
-1. IMU reads orientation (pitch, roll, yaw)
-2. System computes rotation matrix
-3. Inverse kinematics calculates leg positions
-4. Arduino receives servo commands
-5. Servos adjust to stabilize platform
+| Issue | Solution |
+|-------|----------|
+| No IMU detected | 1. Check connections<br>2. Run `sudo i2cdetect -y 1`<br>3. Verify 3.3V power<br>4. Check I2C enabled |
+| Arduino not found | 1. Check USB connection<br>2. Run `ls /dev/ttyACM*`<br>3. Set permissions with `sudo usermod -a -G dialout $USER` |
+| Servo jitter | 1. Verify power supply capacity<br>2. Check ground connections<br>3. Reduce update frequency |
+| Visualization lag | 1. Reduce visualization update rate<br>2. Close other applications<br>3. Check CPU usage |
+
+## 🛟 Common Commands
+
+```bash
+# Check I2C devices
+sudo i2cdetect -y 1
+
+# Monitor IMU data
+python imu_stabilization.py
+
+# Test servos individually
+python
+>>> import serial
+>>> arduino = serial.Serial('/dev/ttyACM0', 115200)
+>>> arduino.write(b"S,0,0,90;")  # Move leg 0, servo 0 to 90°
+
+# Check system logs
+journalctl -f  # Monitor system logs
+dmesg | grep -i i2c  # Check I2C related messages
+```
+
+## 📝 Development Notes
+
+- The system automatically detects if running on Raspberry Pi and switches to appropriate mode
+- Hardware mode requires I2C and serial connections
+- Simulation mode available for testing without hardware
+- All angles are in degrees
+- Servo commands format: "S,leg,servo,angle;" (e.g., "S,0,0,90;")
 
 ## 🤝 Contributing
 
@@ -128,17 +186,6 @@ self.DEFAULT_HEIGHT = 125  # mm
 ## 📝 License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🔍 Troubleshooting
-
-Common issues and solutions:
-
-| Issue | Solution |
-|-------|----------|
-| No IMU connection | Check I2C address and connections |
-| Servo jitter | Verify power supply capacity |
-| Arduino not found | Check USB port and permissions |
-| Visualization lag | Adjust update rate in code |
 
 ## 📞 Support
 
